@@ -22,7 +22,7 @@ import lesson from "../../public/bringItSports/lesson.png";
 // ---- Business details (update before launch) ----
 // TODO: swap in the real payment link (Square, Venmo, Stripe, etc.).
 const PAYMENT_URL = "";
-// TODO: contact form submissions and footer email go here.
+// TODO: footer/support email (contact form submits to Google Forms).
 const BUSINESS_EMAIL = "";
 const OPENING_DATE = "December 1st";
 
@@ -190,7 +190,7 @@ export const mockSiteConfig: SiteConfig = {
       body: "A place for athletes, families, and neighbors to train, play, and connect.",
       backgroundUrl: lesson.src,
       overlay: true,
-      height: "md",
+      height: "lg",
     },
     {
       visible: true,
@@ -508,7 +508,18 @@ export const mockSiteConfig: SiteConfig = {
           title: "Get in Touch",
           subtitle: "Booking a cage, a court, or the space? Let us know what you need.",
           description: `We open ${OPENING_DATE}. Send us a message and we'll get back to you with availability and rates.`,
-          submission: { type: "resend" },
+          submission: {
+            type: "googleForm",
+            formUrl: "https://docs.google.com/forms/d/e/1FAIpQLSd4O9SdV5tlhIA5cwP18VaR2WGl4681Ord0rsAlH9tA-gcc-w/formResponse",
+            fieldMap: {
+              name: "entry.725311779",
+              email: "entry.621732597",
+              phone: "entry.1255485054",
+              interest: "entry.741328780",
+              date: "entry.1439426286",
+              details: "entry.1998469522",
+            },
+          },
           submitLabel: "Send Message",
           successTitle: "Message received!",
           successMessage: "Thanks for reaching out. We'll get back to you shortly.",
