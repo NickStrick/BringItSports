@@ -108,7 +108,9 @@ gtag('config', '${googleAdsId}');`}
           <CartProvider>
             <GlobalHashLinkHandler />
             <PaymentsOverlay />
-            <main className="overflow-hidden"><div id="top"></div>{children}</main>
+            {/* overflow-x-clip, not overflow-hidden: hidden makes <main> a scroll container that
+                scrollIntoView() scrolls, sliding the top spacing under the fixed header */}
+            <main className="overflow-x-clip"><div id="top"></div>{children}</main>
           {showThemeSwitcher && <ThemeSwitcher />}
 
           {/* ✅ Admin overlay (toggle with Ctrl/Cmd + Alt + A OR Ctrl/Cmd + Shift + A)

@@ -251,6 +251,10 @@ body[data-font="classic"] {
 }
 
 /* Apply font vars to document — Tailwind's base layer sets sans; these win because they come after */
+/* Anchor jumps (#services etc.) land below the fixed 4rem header */
+html {
+  scroll-padding-top: 4rem;
+}
 body {
   font-family: var(--font-body);
 }
