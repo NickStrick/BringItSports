@@ -1,19 +1,29 @@
 import { BUSINESS, DEFAULT_DESCRIPTION, SITE_URL } from "@/lib/seo";
 
 export default function SeoLocalBusinessSchema() {
+  // Only include address parts that have been filled in
+  const address = Object.fromEntries(
+    Object.entries(BUSINESS.location).filter(([, v]) => v)
+  );
+  const hasAddress = Object.keys(address).some((k) => k !== "addressCountry");
+
   const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "Person",
-    "@id": `${SITE_URL}/#person`,
-    "name": BUSINESS.founder,
-    "alternateName": BUSINESS.name,
-    "jobTitle": BUSINESS.jobTitle,
+    "@type": "SportsActivityLocation",
+    "@id": `${SITE_URL}/#business`,
+    "name": BUSINESS.name,
+    "alternateName": BUSINESS.shortName,
     "description": DEFAULT_DESCRIPTION,
     "url": SITE_URL,
-    "email": BUSINESS.email,
     "image": `${SITE_URL}${BUSINESS.ogImage}`,
-    "address": { "@type": "PostalAddress", ...BUSINESS.location },
-    "knowsAbout": BUSINESS.knowsAbout,
+    "logo": `${SITE_URL}${BUSINESS.ogImage}`,
+    ...(BUSINESS.email ? { "email": BUSINESS.email } : {}),
+    ...(BUSINESS.phone ? { "telephone": BUSINESS.phone } : {}),
+    ...(hasAddress ? { "address": { "@type": "PostalAddress", ...address } } : {}),
+    "makesOffer": BUSINESS.services.map((name) => ({
+      "@type": "Offer",
+      "itemOffered": { "@type": "Service", "name": name },
+    })),
     "sameAs": BUSINESS.sameAs,
   };
 

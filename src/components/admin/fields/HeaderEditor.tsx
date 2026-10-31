@@ -246,7 +246,7 @@ export function EditHeader({
           className="input w-full"
           value={section.logoText ?? ''}
           onChange={(e) => setLogoText(e.target.value)}
-          placeholder="e.g., Mark Stricker"
+          placeholder="e.g., Company Name"
         />
       </div>
 

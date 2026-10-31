@@ -31,9 +31,9 @@ export const metadata: Metadata = {
   description: DEFAULT_DESCRIPTION,
   keywords: KEYWORDS,
   applicationName: BUSINESS.name,
-  authors: [{ name: BUSINESS.founder, url: SITE_URL }],
-  creator: BUSINESS.founder,
-  category: "technology",
+  authors: [{ name: BUSINESS.name, url: SITE_URL }],
+  creator: BUSINESS.name,
+  category: "sports",
   alternates: {
     canonical: "/",
   },
@@ -56,7 +56,7 @@ export const metadata: Metadata = {
     title: DEFAULT_TITLE,
     description: DEFAULT_DESCRIPTION,
     locale: "en_US",
-    images: [{ url: BUSINESS.ogImage, alt: `${BUSINESS.founder} — ${BUSINESS.jobTitle}` }],
+    images: [{ url: BUSINESS.ogImage, alt: `${BUSINESS.name} logo` }],
   },
   twitter: {
     card: "summary_large_image",
@@ -64,10 +64,13 @@ export const metadata: Metadata = {
     description: DEFAULT_DESCRIPTION,
     images: [BUSINESS.ogImage],
   },
-  other: {
-    "geo.region": "US-IL",
-    "geo.placename": "Chicago",
-  },
+  // geo.* tags are only emitted once BUSINESS.location is filled in
+  other: Object.fromEntries(
+    [
+      ["geo.region", BUSINESS.location.addressRegion && `US-${BUSINESS.location.addressRegion}`],
+      ["geo.placename", BUSINESS.location.addressLocality],
+    ].filter(([, v]) => v)
+  ) as Record<string, string>,
 };
 
 
