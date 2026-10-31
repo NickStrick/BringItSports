@@ -9,22 +9,17 @@ import {
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import type { OrderRecord, OrderItem } from '@/types/orders';
+import { awsCredentials, awsRegion } from '@/lib/awsEnv';
 
-// AWS region/credentials are read from server env (AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, etc.)
-const REGION = process.env.AWS_REGION || 'us-east-1';
+// AWS region/credentials come from server env via awsEnv (APP_AWS_* on Amplify, AWS_* locally)
+const REGION = awsRegion('us-east-1');
 
 // DynamoDB table name for orders (override via env only if needed)
 export const ORDERS_TABLE = process.env.DDB_ORDERS_TABLE || 'SC-Orders';
 
 const client = new DynamoDBClient({
   region: REGION,
-  credentials:
-    process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
-      ? {
-          accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-        }
-      : undefined,
+  credentials: awsCredentials(),
 });
 
 const ddb = DynamoDBDocumentClient.from(client, {

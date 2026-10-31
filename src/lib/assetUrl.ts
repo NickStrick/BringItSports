@@ -1,4 +1,6 @@
 // src/lib/assetUrl.ts
+import { awsRegion } from '@/lib/awsEnv';
+
 export function resolveAssetUrl(src?: string): string | undefined {
   if (!src) return undefined;
 
@@ -12,7 +14,7 @@ export function resolveAssetUrl(src?: string): string | undefined {
   const cdn = process.env.NEXT_PUBLIC_S3_CDN_BASE || '';
   const bucket =
     process.env.NEXT_PUBLIC_S3_DEFAULT_BUCKET || process.env.S3_GALLERY_BUCKET || '';
-  const region = process.env.AWS_REGION || 'us-east-2';
+  const region = awsRegion('us-east-2');
 
   if (cdn) {
     return `${cdn.replace(/\/$/, '')}/${key}`;

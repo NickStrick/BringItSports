@@ -1,6 +1,7 @@
 // src/app/api/admin/config/[siteId]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { awsCredentials, awsRegion } from '@/lib/awsEnv';
 
 // --- super lightweight "admin" guard (same header you've been using) ---
 function assertAdmin(req: NextRequest): NextResponse | null {
@@ -11,13 +12,13 @@ function assertAdmin(req: NextRequest): NextResponse | null {
 }
 
 // --- envs / S3 client ---
-const REGION = process.env.AWS_REGION || 'us-east-2';
+const REGION = awsRegion('us-east-2');
 const BUCKET =
   process.env.NEXT_PUBLIC_S3_DEFAULT_BUCKET ||
   process.env.S3_GALLERY_BUCKET ||
   '';
 
-const s3 = new S3Client({ region: REGION });
+const s3 = new S3Client({ region: REGION, credentials: awsCredentials() });
 
 function keyFor(siteId: string) {
   // where we store the config JSON

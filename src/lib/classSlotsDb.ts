@@ -4,9 +4,10 @@ import {
   DynamoDBDocumentClient,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
+import { awsCredentials, awsRegion } from '@/lib/awsEnv';
 
-// AWS region/credentials are read from server env (AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, etc.)
-const REGION = process.env.AWS_REGION || 'us-east-1';
+// AWS region/credentials come from server env via awsEnv (APP_AWS_* on Amplify, AWS_* locally)
+const REGION = awsRegion('us-east-1');
 
 // DynamoDB table tracking live booked-seat counts per class time slot, keyed by
 // (businessId, classTimeId). Separate from SC-Orders because it needs atomic
@@ -15,13 +16,7 @@ export const CLASS_SLOTS_TABLE = process.env.DDB_CLASS_SLOTS_TABLE || 'SC-ClassS
 
 const client = new DynamoDBClient({
   region: REGION,
-  credentials:
-    process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
-      ? {
-          accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-        }
-      : undefined,
+  credentials: awsCredentials(),
 });
 
 const ddb = DynamoDBDocumentClient.from(client, {

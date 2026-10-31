@@ -5,10 +5,9 @@ import {
   ListObjectsV2CommandOutput,
 } from '@aws-sdk/client-s3';
 import type { GalleryItem, GallerySource } from '@/types/site';
+import { awsCredentials, awsRegion } from '@/lib/awsEnv';
 
-const region = process.env.AWS_REGION!;
-const accessId = process.env.AWS_ACCESS_KEY_ID!;
-const secret = process.env.AWS_SECRET_ACCESS_KEY!;
+const region = awsRegion('us-east-1');
 const defaultBucket = process.env.S3_GALLERY_BUCKET || '';
 const defaultPrefix = process.env.S3_GALLERY_PREFIX || '';
 const defaultCDN = process.env.S3_GALLERY_CDN_BASE || '';
@@ -18,10 +17,7 @@ function client(): S3Client {
   if (_client) return _client;
   _client = new S3Client({
     region,
-    credentials: {
-      accessKeyId: accessId,
-      secretAccessKey: secret,
-    },
+    credentials: awsCredentials(),
   });
   return _client;
 }
@@ -39,7 +35,7 @@ export async function getGalleryFromS3(
 ): Promise<GalleryItem[]> {
   const bucket = source?.bucket || defaultBucket;
   const prefix = source?.prefix ?? defaultPrefix;
-  const rgn = source?.region || process.env.AWS_REGION;
+  const rgn = source?.region || region;
   const cdn = source?.cdnBase || defaultCDN;
   const limit = source?.limit ?? 200;
   const recursive = source?.recursive ?? true;

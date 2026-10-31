@@ -8,8 +8,9 @@ import {
   _Object as S3Object,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { awsCredentials, awsRegion } from '@/lib/awsEnv';
 
-const REGION = process.env.AWS_REGION || 'us-east-1';
+const REGION = awsRegion('us-east-1');
 
 // Default buckets / cdn
 const DEFAULT_BUCKET =
@@ -27,13 +28,7 @@ const CDN_BASE =
 /** Create client; uses env creds if provided (local dev), or role if deployed */
 export const s3 = new S3Client({
   region: REGION,
-  credentials:
-    process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
-      ? {
-          accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-        }
-      : undefined,
+  credentials: awsCredentials(),
   // SDK v3 defaults to attaching a flexible checksum (x-amz-checksum-crc32) to
   // every request, including presigned ones. At presign time there's no body
   // yet, so the placeholder checksum baked into the signature doesn't match
