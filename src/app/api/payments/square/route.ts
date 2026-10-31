@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { isSquareSandbox } from '@/lib/squareEnv';
 import { quoteCheckoutRequest } from '@/lib/checkoutConfig';
 import type { CheckoutRequest } from '@/lib/checkoutPricing';
+import { confirmRentalsPaid, reholdRentals } from '@/lib/rentalCheckout';
 
 type SquarePaymentRequest = {
   sourceId: string;          // card token from the Web Payments SDK (card.tokenize())
@@ -59,6 +60,10 @@ export async function POST(req: NextRequest) {
   if (error) return error;
   const amount = quote.amountCents;
 
+  // Make sure every rental time in the cart is still ours before charging the card.
+  const rentals = await reholdRentals(body.checkout);
+  if (rentals.error) return rentals.error;
+
   const baseUrl = isSquareSandbox() ? 'https://connect.squareupsandbox.com' : 'https://connect.squareup.com';
   // Optional pin; when unset Square uses the API version configured on the app in the Developer Dashboard.
   const apiVersion = process.env.SQUARE_API_VERSION?.trim();
@@ -103,6 +108,8 @@ export async function POST(req: NextRequest) {
       { status: squareRes.ok ? 502 : squareRes.status },
     );
   }
+
+  await confirmRentalsPaid(rentals.holds, { orderId: body.orderId, paymentId: data.payment.id });
 
   return NextResponse.json({
     ok: true,

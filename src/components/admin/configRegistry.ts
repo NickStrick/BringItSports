@@ -30,6 +30,7 @@ import type {
   BannerCarouselSection,
   ClassDetailSection,
   ClassListSection,
+  RentalSchedulerSection,
   SiteDisabledSection,
 } from '@/types/site';
 
@@ -388,6 +389,19 @@ export const SECTION_REGISTRY: SectionRegistry = {
       buyCtaFallback: 'Book Now',
     }),
   } as SectionRegistryItem<ClassListSection>,
+
+  rentalScheduler: {
+    label: 'Rental Booking Calendar',
+    allowed: true,
+    create: (id = `rentalScheduler-${crypto.randomUUID().slice(0,6)}`): RentalSchedulerSection => ({
+      id,
+      type: 'rentalScheduler',
+      title: 'Book Online',
+      subtitle: '',
+      resourceIds: [],
+      buyCtaFallback: 'Book Now',
+    }),
+  } as SectionRegistryItem<RentalSchedulerSection>,
 
   persons: {
     label: 'Persons',

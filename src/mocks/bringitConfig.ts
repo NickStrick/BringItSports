@@ -31,6 +31,17 @@ const payHref = PAYMENT_URL || "/contact";
 
 const BUSINESS_NAME = "Bring It Sports Academy";
 
+// TODO: placeholder rental hours (Sun … Sat) until the owner confirms them.
+const RENTAL_HOURS = [
+  { open: "09:00", close: "17:00" },
+  { open: "15:00", close: "21:00" },
+  { open: "15:00", close: "21:00" },
+  { open: "15:00", close: "21:00" },
+  { open: "15:00", close: "21:00" },
+  { open: "15:00", close: "21:00" },
+  { open: "09:00", close: "17:00" },
+];
+
 export const mockSiteConfig: SiteConfig = {
   theme: {
     preset: "custom",
@@ -274,8 +285,11 @@ export const mockSiteConfig: SiteConfig = {
       },
     },
     payments: {
-      cartActive: false,
-      paymentType: "externalLink",
+      // Square charges cards on-site and locks rental times as paid. Switch to
+      // "externalLink" (Venmo etc.) in Settings → Payments; rentals booked that way
+      // show as "Awaiting payment" in Admin → Rentals until confirmed.
+      cartActive: true,
+      paymentType: "square",
       externalPaymentUrl: PAYMENT_URL,
       supportEmail: BUSINESS_EMAIL,
       taxes: {
@@ -286,6 +300,62 @@ export const mockSiteConfig: SiteConfig = {
         mode: "pickup",
       },
     },
+  },
+  // TODO: confirm real hours and prices with the owner (editable in Admin → Rentals).
+  rentals: {
+    timezone: "America/Chicago",
+    bookingWindowDays: 28,
+    leadTimeMinutes: 60,
+    resources: [
+      {
+        id: "cage-1",
+        name: "Batting Cage 1",
+        description: "Indoor turf batting cage",
+        imageUrl: turfCage.src,
+        pricePerHour: 4000,
+        currency: "USD",
+        slotMinutes: 30,
+        minSlots: 1,
+        maxSlots: 6,
+        weeklyHours: RENTAL_HOURS,
+      },
+      {
+        id: "cage-2",
+        name: "Batting Cage 2",
+        description: "Indoor turf batting cage",
+        imageUrl: cagePractice.src,
+        pricePerHour: 4000,
+        currency: "USD",
+        slotMinutes: 30,
+        minSlots: 1,
+        maxSlots: 6,
+        weeklyHours: RENTAL_HOURS,
+      },
+      {
+        id: "pickleball-court",
+        name: "Pickleball Court",
+        description: "Indoor court — bring up to 4 players",
+        imageUrl: field.src,
+        pricePerHour: 3000,
+        currency: "USD",
+        slotMinutes: 30,
+        minSlots: 2,
+        maxSlots: 6,
+        weeklyHours: RENTAL_HOURS,
+      },
+      {
+        id: "full-facility",
+        name: "Full Facility",
+        description: "The whole space for practices, clinics, and events",
+        imageUrl: gym.src,
+        pricePerHour: 15000,
+        currency: "USD",
+        slotMinutes: 60,
+        minSlots: 1,
+        maxSlots: 8,
+        weeklyHours: RENTAL_HOURS,
+      },
+    ],
   },
   pages: [
     {
@@ -300,8 +370,17 @@ export const mockSiteConfig: SiteConfig = {
           title: "Space Rental",
           subtitle: "Reserve the facility for your team practice, clinic, camp, tryout, birthday party, or private event. Rent a section or the whole space — tell us what you need and we'll set it up.",
           imageUrl: gym.src,
-          primaryCta: { label: "Request a Rental", href: "/contact" },
-          secondaryCta: { label: "Pay Now", href: payHref },
+          primaryCta: { label: "Book the Space", href: "#book-space" },
+          secondaryCta: { label: "Ask a Question", href: "/contact" },
+        },
+        {
+          id: "book-space",
+          type: "rentalScheduler",
+          visible: true,
+          title: "Book the Facility",
+          subtitle: "Pick a day and start time, choose how long, and pay online to lock in your spot.",
+          resourceIds: ["full-facility"],
+          buyCtaFallback: "Book Now",
         },
         {
           id: "features-space",
@@ -351,8 +430,17 @@ export const mockSiteConfig: SiteConfig = {
           title: "Batting Cages",
           subtitle: "Indoor batting cages on turf, open year-round. Get your swings in solo, bring the team, or book time with a coach for a private lesson.",
           imageUrl: hittingCage.src,
-          primaryCta: { label: "Book a Cage", href: "/contact" },
-          secondaryCta: { label: "Pay Now", href: payHref },
+          primaryCta: { label: "Book a Cage", href: "#book-cages" },
+          secondaryCta: { label: "Ask a Question", href: "/contact" },
+        },
+        {
+          id: "book-cages",
+          type: "rentalScheduler",
+          visible: true,
+          title: "Book a Cage",
+          subtitle: "Pick a cage, a day, and a start time — book in 30-minute steps and pay online to lock it in.",
+          resourceIds: ["cage-1", "cage-2"],
+          buyCtaFallback: "Book Now",
         },
         {
           id: "features-cages",
@@ -413,8 +501,17 @@ export const mockSiteConfig: SiteConfig = {
           title: "Pickleball",
           subtitle: "Indoor pickleball for every skill level. Drop in for open play, join a league, or reserve a court for you and your crew.",
           imageUrl: turfCage.src,
-          primaryCta: { label: "Reserve a Court", href: "/contact" },
-          secondaryCta: { label: "Pay Now", href: payHref },
+          primaryCta: { label: "Reserve a Court", href: "#book-court" },
+          secondaryCta: { label: "Ask a Question", href: "/contact" },
+        },
+        {
+          id: "book-court",
+          type: "rentalScheduler",
+          visible: true,
+          title: "Reserve the Court",
+          subtitle: "Pick a day and start time, choose how long, and pay online to lock it in.",
+          resourceIds: ["pickleball-court"],
+          buyCtaFallback: "Reserve Now",
         },
         {
           id: "features-pickleball",

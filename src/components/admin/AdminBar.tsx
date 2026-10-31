@@ -11,6 +11,7 @@ import AdminAIChatPanel from './AdminAIChatPanel';
 import OrdersModal from './OrdersModal';
 import ProductsModal from './ProductsModal';
 import ClassesModal from './ClassesModal';
+import RentalsModal from './RentalsModal';
 import { applySiteConfigPatch } from '@/lib/siteConfigPatch';
 import { isAdminAiUiEnabled } from '@/lib/adminAi';
 import { exitAdminMode, flushAdminSaves, onAdminSaved, useAdminHasUnsaved } from '@/lib/adminAutoSave';
@@ -35,6 +36,7 @@ export default function AdminBar() {
   const [showOrders, setShowOrders] = useState(false);
   const [showProducts, setShowProducts] = useState(false);
   const [showClasses, setShowClasses] = useState(false);
+  const [showRentals, setShowRentals] = useState(false);
   const hasUnsaved = useAdminHasUnsaved();
   const [savingAll, setSavingAll] = useState(false);
   const [showSavedPrompt, setShowSavedPrompt] = useState(false);
@@ -171,6 +173,14 @@ export default function AdminBar() {
           </button>
 
           <button
+            className={showRentals ? 'btn btn-primary' : 'btn btn-inverted'}
+            onClick={() => setShowRentals((v) => !v)}
+            title="Manage rental bookings, hours, and prices"
+          >
+            Rentals
+          </button>
+
+          <button
             className="btn btn-inverted"
             onClick={() => setShowSettings(true)}
             title="Edit site settings (payments, general)"
@@ -280,6 +290,7 @@ export default function AdminBar() {
 
       {/* Classes modal */}
       {showClasses && <ClassesModal onClose={() => setShowClasses(false)} />}
+      {showRentals && <RentalsModal onClose={() => setShowRentals(false)} />}
     </div>
   );
 }

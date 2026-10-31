@@ -54,13 +54,15 @@ export default function CartModal() {
                   <span className="font-semibold">
                     {formatPrice(item.price * item.quantity, item.currency ?? currency)}
                   </span>
-                  <button
-                    onClick={() => addItem({ id: item.id, name: item.name, price: item.price, currency: item.currency, imageUrl: item.imageUrl, taxable: item.taxable })}
-                    className="text-gray-400 hover:text-emerald-600 transition-colors"
-                    aria-label={`Add one more ${item.name}`}
-                  >
-                    <Plus size={18} />
-                  </button>
+                  {!item.rental && (
+                    <button
+                      onClick={() => addItem({ id: item.id, name: item.name, price: item.price, currency: item.currency, imageUrl: item.imageUrl, taxable: item.taxable })}
+                      className="text-gray-400 hover:text-emerald-600 transition-colors"
+                      aria-label={`Add one more ${item.name}`}
+                    >
+                      <Plus size={18} />
+                    </button>
+                  )}
                   <button
                     onClick={() => removeItem(item.id)}
                     className="text-gray-400 hover:text-red-600 transition-colors"

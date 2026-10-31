@@ -34,6 +34,7 @@ import PageLinks from './sections/PageLinks';
 import BannerCarousel from './sections/BannerCarousel';
 import ClassDetail from './sections/ClassDetail';
 import ClassList from './sections/ClassList';
+import RentalScheduler from './sections/RentalScheduler';
 import SiteDisabled from './sections/SiteDisabled';
 
 // Exhaustiveness helper (nice to have)
@@ -145,6 +146,9 @@ export function SectionRenderer({ section }: { section: AnySection }) {
     }
     case 'classList': {
       return <ClassList key={section.id} {...section} />;
+    }
+    case 'rentalScheduler': {
+      return <RentalScheduler key={section.id} {...section} />;
     }
     case 'siteDisabled': {
       return <SiteDisabled {...section} />;

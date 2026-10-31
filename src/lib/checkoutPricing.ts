@@ -6,6 +6,7 @@
 import type { PaymentsSettings, SiteConfig } from '@/types/site';
 import { normalizeClassItems } from '@/lib/siteConfigSections';
 import { effectivePriceForSelection, normalizeOptionGroups, type NormOptionGroup } from '@/lib/productOptions';
+import { bookingPriceCents, RentalBookingError, resolveBooking, type RentalHoldRef } from '@/lib/rentalSlots';
 
 /** What the browser sends: only the customer's choices, never prices. */
 export type CheckoutLineRequest = {
@@ -14,6 +15,7 @@ export type CheckoutLineRequest = {
   options?: Record<string, string>; // group label -> chosen item value/label
   classItemId?: string;
   classTimeId?: string;
+  rental?: RentalHoldRef;           // rental booking: priced from config.rentals, always quantity 1
 };
 
 export type CheckoutRequest = {
@@ -121,6 +123,24 @@ export function priceCart(config: SiteConfig, lines: CheckoutLineRequest[]): Pri
       throw new CheckoutPricingError('Invalid quantity in cart.');
     }
     const baseId = String(line.id ?? '').split('::')[0];
+
+    if (line.rental) {
+      if (quantity !== 1) throw new CheckoutPricingError('Invalid quantity in cart.');
+      try {
+        const { resource } = resolveBooking(config.rentals, line.rental);
+        return {
+          id: line.id,
+          name: resource.name,
+          quantity: 1,
+          unitPrice: bookingPriceCents(resource, line.rental.slots),
+          taxable: defaultTaxable,
+          currency: resource.currency,
+        };
+      } catch (e) {
+        if (e instanceof RentalBookingError) throw new CheckoutPricingError(e.message);
+        throw e;
+      }
+    }
 
     if (line.classItemId || line.classTimeId) {
       const cls = classes.find((c) => c.id === (line.classItemId || baseId));

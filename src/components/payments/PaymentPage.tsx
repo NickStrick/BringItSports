@@ -109,6 +109,10 @@ export default function PaymentPage({
   const [promoInput, setPromoInput] = useState('');
   const [appliedPromo, setAppliedPromo] = useState<PromoCode | null>(null);
   const [promoError, setPromoError] = useState<string | null>(null);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  // Rental bookings need their order saved for every payment type: that's what links the
+  // held slots to the order (and marks unverified payments "pending" for the admin).
+  const hasRentals = items.some((i) => i.rental);
   const orderIdRef = useRef<string>(typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()));
   const emailField: CheckoutInput = {
     id: 'email',
@@ -184,6 +188,9 @@ export default function PaymentPage({
       options: i.options,
       classItemId: i.classItemId,
       classTimeId: i.classTimeId,
+      rental: i.rental
+        ? { holdId: i.rental.holdId, resourceId: i.rental.resourceId, date: i.rental.date, start: i.rental.start, slots: i.rental.slots }
+        : undefined,
     })),
     fulfillment,
     tipCents,
@@ -337,6 +344,7 @@ export default function PaymentPage({
     setAppliedPromo(null);
     setPromoInput('');
     setPromoError(null);
+    setCheckoutError(null);
     setTipInput('');
     setStepIndex(0);
     clearCart(); // the paid-for items shouldn't still be sitting in the cart
@@ -388,15 +396,16 @@ export default function PaymentPage({
     setGoogleFormSubmitted(true);
   };
 
-  const saveOrderToS3 = async () => {
-    if (orderSaved || orderSavedRef.current) return;
+  // Resolves true once the order is saved (or already was).
+  const saveOrderToS3 = async (): Promise<boolean> => {
+    if (orderSaved || orderSavedRef.current) return true;
     const customerEmail =
       (customValues.email as string) ||
       (customValues.customerEmail as string) ||
       '';
     if (!customerEmail.trim()) {
       console.warn('[orders] missing customer email; skipping order save');
-      return;
+      return false;
     }
 
     const customerName =
@@ -459,10 +468,16 @@ export default function PaymentPage({
       if (res.ok) {
         orderSavedRef.current = true;
         setOrderSaved(true);
+        return true;
+      }
+      if (res.status === 409) {
+        const data = (await res.json().catch(() => null)) as { error?: string } | null;
+        setCheckoutError(data?.error || 'An item in your cart is no longer available.');
       }
     } catch {
       // best-effort fallback; avoid blocking checkout
     }
+    return false;
   };
 
   const submitCheckoutSideEffects = async () => {
@@ -471,6 +486,7 @@ export default function PaymentPage({
       await submitToGoogleForm();
     }
     await submitDeliveryAddress();
+    if (hasRentals) await saveOrderToS3(); // no-op if already saved
   };
 
   const applyPromo = () => {
@@ -572,18 +588,23 @@ export default function PaymentPage({
                       )}
                       <span className="">
                         {item.name} {item.quantity > 1 && <span className="opacity-70">x{item.quantity}</span>}
+                        {item.rental && item.classTimeLabel && (
+                          <span className="block text-xs text-gray-500">{item.classTimeLabel}</span>
+                        )}
                       </span>
                     </div>
                     <span className="font-medium">
                       {formatPrice(item.price * item.quantity, item.currency ?? currency)}
                     </span>
-                    <button
-                      onClick={() => addItem({ id: item.id, name: item.name, price: item.price, currency: item.currency, imageUrl: item.imageUrl, taxable: item.taxable })}
-                      className="text-gray-400 hover:text-emerald-600 transition-colors"
-                      aria-label={`Add one more ${item.name}`}
-                    >
-                      <Plus size={16} />
-                    </button>
+                    {!item.rental && (
+                      <button
+                        onClick={() => addItem({ id: item.id, name: item.name, price: item.price, currency: item.currency, imageUrl: item.imageUrl, taxable: item.taxable })}
+                        className="text-gray-400 hover:text-emerald-600 transition-colors"
+                        aria-label={`Add one more ${item.name}`}
+                      >
+                        <Plus size={16} />
+                      </button>
+                    )}
                     <button
                       onClick={() => removeItem(item.id)}
                       className="text-gray-400 hover:text-red-600 transition-colors"
@@ -814,6 +835,11 @@ export default function PaymentPage({
                 Could not initialize Converge checkout. Check `CONVERGE_ACCOUNT_ID` (or `CONVERGE_MERCHANT_ID`), `CONVERGE_USER_ID`, `CONVERGE_PIN`, and `NEXT_PUBLIC_CONVERGE_IFRAME_URL`.
               </div>
             )}
+            {checkoutError && (
+              <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+                {checkoutError}
+              </div>
+            )}
             {missingPaymentConfig && (
               <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 Payment configuration is missing. Set the {paymentType === 'clover'
@@ -831,10 +857,17 @@ export default function PaymentPage({
               <button
                 type="button"
                 onClick={async () => {
+                  setCheckoutError(null);
                   await submitCheckoutSideEffects();
+                  // A rental time that couldn't be saved to the order must not be paid for.
+                  if (hasRentals && !orderSavedRef.current) {
+                    setCheckoutError((prev) => prev ?? 'We could not save your booking. Please try again.');
+                    return;
+                  }
                   if (externalPaymentUrl) {
                     window.open(externalPaymentUrl, '_blank', 'noopener,noreferrer');
                   }
+                  if (hasRentals) setPurchaseComplete(true);
                 }}
                 disabled={missingRequired || missingDeliveryAddress}
                 aria-disabled={missingRequired || missingDeliveryAddress}

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createOrder } from '@/lib/ordersDb';
 import { reserveSeats, releaseSeats, SlotFullError } from '@/lib/classSlotsDb';
+import { attachOrderToHold, SlotTakenError } from '@/lib/rentalsDb';
+import { orderRentalHolds } from '@/lib/rentalOrders';
 import { getObjectJson } from '@/lib/s3-admin';
 import { normalizeClassItems } from '@/lib/siteConfigSections';
 import type { OrderItem } from '@/types/orders';
@@ -105,6 +107,37 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Link rental holds to this order. Holds a payment route already confirmed stay
+  // "booked"; unverified ones (external link, Converge) become "pending" for admin review.
+  const orderId = typeof body?.orderId === 'string' ? body.orderId : '';
+  const paymentType = (body?.payment as { type?: string } | undefined)?.type;
+  let rentalConflict = false;
+  for (const hold of orderRentalHolds(items)) {
+    try {
+      await attachOrderToHold(businessId, hold.holdId, hold.slotKeys, {
+        orderId,
+        customerName: typeof customerName === 'string' ? customerName : undefined,
+        customerEmail,
+      });
+    } catch (err) {
+      if (!(err instanceof SlotTakenError)) {
+        console.error('[orders] rental attach failed', err);
+      }
+      // Nothing has been paid yet with an external link — stop before sending them to pay.
+      if (paymentType === 'externalLink') {
+        await Promise.all(
+          classReservations.map((r) => releaseSeats(businessId, r.classTimeId, r.qty).catch(() => {}))
+        );
+        return NextResponse.json(
+          { error: 'A booking time in your cart is no longer available — please pick another time.' },
+          { status: 409 }
+        );
+      }
+      rentalConflict = true;
+      console.error('[orders] rental time lost after payment — needs manual review', { orderId, holdId: hold.holdId });
+    }
+  }
+
   try {
     const order = await createOrder({
       businessId,
@@ -116,6 +149,7 @@ export async function POST(req: NextRequest) {
       status,
       notes,
       ...rest,
+      ...(rentalConflict ? { rentalConflict: true } : {}),
     });
 
     console.log('[orders] created', {

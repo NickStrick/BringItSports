@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { guardAdmin } from '@/lib/adminGuard';
 import { deleteOrder, getOrder, listOrdersByBusiness } from '@/lib/ordersDb';
 import { releaseSeats } from '@/lib/classSlotsDb';
+import { releaseBooking } from '@/lib/rentalsDb';
+import { orderRentalHolds } from '@/lib/rentalOrders';
 
 export async function GET(req: NextRequest) {
   const denied = guardAdmin(req);
@@ -79,6 +81,10 @@ export async function DELETE(req: NextRequest) {
           const qty = typeof item.quantity === 'number' && item.quantity > 0 ? item.quantity : 1;
           return releaseSeats(businessId, classTimeId, qty).catch(() => {});
         })
+      );
+      // Free any rental times this order was holding.
+      await Promise.all(
+        orderRentalHolds(order.items).map((h) => releaseBooking(businessId, h.holdId, h.slotKeys).catch(() => {}))
       );
     }
 

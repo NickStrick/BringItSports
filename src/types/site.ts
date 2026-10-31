@@ -107,6 +107,7 @@ export type SectionBase = {
     | 'bannerCarousel'
     | 'classDetail'
     | 'classList'
+    | 'rentalScheduler'
     | 'siteDisabled'
     ;
 
@@ -148,6 +149,7 @@ export type AnySection =
   | BannerCarouselSection
   | ClassDetailSection
   | ClassListSection
+  | RentalSchedulerSection
   | SiteDisabledSection;
   ;
 // add this near other shared types
@@ -371,6 +373,7 @@ export type SiteConfig = {
   settings?: SiteSettings;
   products?: SiteProductsConfig;
   classes?: SiteClassesConfig;
+  rentals?: SiteRentalsConfig;
   /** Custom pages — each gets a dynamic route at /[slug] */
   pages?: SitePage[];
 };
@@ -967,6 +970,47 @@ export type ClassListSection = SectionBase & {
   title?: string;
   subtitle?: string;
   buyCtaFallback?: string;      // default "Book Now"
+};
+
+// ─── Rentals (bookable spaces: cages, courts, rooms) ───────────────────────────
+
+/** Open hours for one weekday, "HH:MM" 24h. Omitted/null weekday = closed. */
+export type RentalDayHours = { open: string; close: string };
+
+export type RentalResource = {
+  id: string;
+  name: string;                 // e.g. "Cage 1"
+  description?: string;
+  imageUrl?: string;
+  pricePerHour: number;         // cents; a booking costs pricePerHour × its length
+  currency?: string;
+  slotMinutes: number;          // booking increment, e.g. 30
+  minSlots?: number;            // shortest booking, in slots (default 1)
+  maxSlots?: number;            // longest booking, in slots (default 8)
+  /** Index 0 = Sunday … 6 = Saturday */
+  weeklyHours: (RentalDayHours | null)[];
+  blackoutDates?: string[];     // ISO dates the resource is closed
+  hidden?: boolean;             // kept in config but not bookable
+};
+
+export type SiteRentalsConfig = {
+  resources: RentalResource[];
+  timezone?: string;            // IANA, e.g. "America/Chicago" — slot times are local to the business
+  bookingWindowDays?: number;   // how far ahead customers can book (default 28)
+  leadTimeMinutes?: number;     // no bookings starting sooner than this (default 60)
+};
+
+// Customer-facing booking calendar for config.rentals.resources
+export type RentalSchedulerSection = SectionBase & {
+  id: string;
+  type: 'rentalScheduler';
+  title?: string;
+  subtitle?: string;
+  /** Resources to offer here; empty/omitted = every visible resource */
+  resourceIds?: string[];
+  buyCtaFallback?: string;      // default "Book Now"
+  /** false = book without checkout (name + email only); slots are locked as booked, no charge. Default true. */
+  requirePayment?: boolean;
 };
 
 export type PersonItem = {

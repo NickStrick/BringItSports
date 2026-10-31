@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { quoteCheckoutRequest } from '@/lib/checkoutConfig';
 import type { CheckoutRequest } from '@/lib/checkoutPricing';
+import { confirmRentalsPaid, reholdRentals } from '@/lib/rentalCheckout';
 
 type CloverChargeRequest = {
   source: string;             // Clover card token
@@ -35,6 +36,10 @@ export async function POST(req: NextRequest) {
 
   const { quote, error } = await quoteCheckoutRequest(body.checkout, { amountCents: body.amount, currency: body.currency });
   if (error) return error;
+
+  // Make sure every rental time in the cart is still ours before charging the card.
+  const rentals = await reholdRentals(body.checkout);
+  if (rentals.error) return rentals.error;
 
   const clientIp =
     req.headers.get('x-forwarded-for') ??
@@ -71,6 +76,9 @@ export async function POST(req: NextRequest) {
         : 'Clover charge failed.';
     return NextResponse.json({ error: message, details: data }, { status: cloverRes.status });
   }
+
+  const chargeId = typeof data === 'object' && data && 'id' in data ? String((data as { id?: unknown }).id ?? '') : '';
+  await confirmRentalsPaid(rentals.holds, { paymentId: chargeId });
 
   return NextResponse.json({ ok: true, charge: data, amountCents: quote.amountCents });
 }
