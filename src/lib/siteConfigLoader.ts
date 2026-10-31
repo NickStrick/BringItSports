@@ -17,13 +17,20 @@ export async function getSiteConfig(): Promise<SiteConfig> {
   const fallback = prefer === "published" ? "published" : "published";
 
   async function fetchJSON(url: string) {
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      console.warn(`[config] ${url} -> ${res.status}`, text?.slice(0, 200));
+    // Network failures (bad/unreachable NEXT_PUBLIC_BASE_URL, DNS, TLS) must fall
+    // through to the mock instead of crashing every page render.
+    try {
+      const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(5000) });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        console.warn(`[config] ${url} -> ${res.status}`, text?.slice(0, 200));
+        return null;
+      }
+      return (await res.json()) as SiteConfig;
+    } catch (err) {
+      console.warn(`[config] ${url} -> fetch failed`, err);
       return null;
     }
-    return (await res.json()) as SiteConfig;
   }
 
   // try preferred variant for this site id
