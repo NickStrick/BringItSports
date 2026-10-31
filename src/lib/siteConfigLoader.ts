@@ -12,7 +12,7 @@ export async function getSiteConfig(): Promise<SiteConfig> {
   if (useMock) return mockSiteConfig;
 
   const base = process.env.NEXT_PUBLIC_BASE_URL ?? "";
-  const site = process.env.NEXT_PUBLIC_SITE_ID ?? "stricker-san";
+  const site = process.env.NEXT_PUBLIC_SITE_ID ?? "bring-it-sports";
   const prefer = (process.env.NEXT_PUBLIC_CONFIG_VARIANT ?? "published") as "published" | "published";
   const fallback = prefer === "published" ? "published" : "published";
 
