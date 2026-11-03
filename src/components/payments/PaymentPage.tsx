@@ -11,6 +11,9 @@ import type { CheckoutInput, GoogleFormOptions, PromoCode } from '@/types/site';
 import { useSite } from '@/context/SiteContext';
 import { computeCheckoutTotals, type CheckoutRequest } from '@/lib/checkoutPricing';
 
+// Checkout input ids saveOrderToS3 reads the customer's name from.
+const NAME_FIELD_IDS = ['customer-name', 'name', 'fullName', 'customerName'];
+
 function formatPrice(cents: number, currency = 'USD') {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -121,9 +124,24 @@ export default function PaymentPage({
     required: true,
     placeholder: 'you@example.com',
   };
+  // Bookings need a name for the order and the admin's schedule. A name field from the
+  // site config is reused (and made required) so the customer isn't asked twice.
+  const hasBookings = items.some((i) => i.rental || i.classTimeId);
+  const nameField: CheckoutInput = {
+    id: 'name',
+    label: 'Name',
+    type: 'text',
+    required: true,
+    placeholder: 'Your full name',
+  };
+  const configuredInputs = (checkoutInputs ?? []).filter((field) => field.id !== 'email' && !field.hidden);
+  const hasConfiguredName = configuredInputs.some((field) => NAME_FIELD_IDS.includes(field.id));
   const effectiveCheckoutInputs = [
     emailField,
-    ...(checkoutInputs ?? []).filter((field) => field.id !== 'email' && !field.hidden),
+    ...(hasBookings && !hasConfiguredName ? [nameField] : []),
+    ...configuredInputs.map((field) =>
+      hasBookings && NAME_FIELD_IDS.includes(field.id) ? { ...field, required: true } : field
+    ),
   ];
   const hasDetailsStep = effectiveCheckoutInputs.length > 0;
   const [stepIndex, setStepIndex] = useState(0);
