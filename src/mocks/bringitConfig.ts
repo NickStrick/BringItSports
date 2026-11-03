@@ -347,6 +347,7 @@ export const mockSiteConfig: SiteConfig = {
         id: "full-facility",
         name: "Full Facility",
         description: "The whole space for practices, clinics, and events",
+        includesResourceIds: ["cage-1", "cage-2"],
         imageUrl: gym.src,
         pricePerHour: 15000,
         currency: "USD",

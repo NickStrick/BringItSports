@@ -10,6 +10,11 @@
 //   pending — order placed with a payment we can't verify (external link / Converge);
 //             stays taken until an admin confirms or releases it
 //   blocked — taken by the business (reserved for admin use)
+//
+// A booking on a rental that includes others (RentalResource.includesResourceIds) also
+// writes rows on the included rentals' slots, in the same transaction and under the same
+// holdId. So either side finding the other's row refuses the booking, and every later
+// step (confirm, release) treats them as one booking.
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DeleteCommand,
@@ -19,7 +24,7 @@ import {
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { awsCredentials, awsRegion } from '@/lib/awsEnv';
-import { slotKey, type RentalHoldRef } from '@/lib/rentalSlots';
+import { slotKey, type RentalHoldRef, type RentalSlotRef } from '@/lib/rentalSlots';
 
 // AWS region/credentials come from server env via awsEnv (APP_AWS_* on Amplify, AWS_* locally)
 const REGION = awsRegion('us-east-1');
@@ -46,6 +51,7 @@ export type RentalSlotRow = {
   holdId: string;
   holdExpiresAt?: number;     // epoch ms, only while held
   ttl?: number;               // epoch seconds, only while held
+  bookingResourceId?: string; // rental the booking was made on; differs from resourceId on an included rental's row
   bookingStart?: string;      // first slot of the booking this slot belongs to
   bookingSlots?: number;
   orderId?: string;
@@ -67,9 +73,16 @@ function errName(err: unknown) {
   return err && typeof err === 'object' && 'name' in err ? (err as { name?: string }).name : undefined;
 }
 
-/** Slot keys for a held booking, from the server-resolved slot starts. */
-export function holdSlotKeys(hold: Pick<RentalHoldRef, 'resourceId' | 'date'>, starts: string[]) {
-  return starts.map((s) => slotKey(hold.resourceId, hold.date, s));
+/** Slot keys for a held booking, from the server-resolved slot starts and included-rental slots. */
+export function holdSlotKeys(
+  hold: Pick<RentalHoldRef, 'resourceId' | 'date'>,
+  starts: string[],
+  includedSlots: RentalSlotRef[]
+) {
+  return [
+    ...starts.map((s) => slotKey(hold.resourceId, hold.date, s)),
+    ...includedSlots.map((s) => slotKey(s.resourceId, hold.date, s.start)),
+  ];
 }
 
 /**
@@ -77,26 +90,33 @@ export function holdSlotKeys(hold: Pick<RentalHoldRef, 'resourceId' | 'date'>, s
  * that are free, whose hold has expired, or that this same hold already owns
  * (so it doubles as "refresh my hold" right before charging).
  */
-export async function holdSlots(businessId: string, hold: RentalHoldRef, starts: string[]): Promise<number> {
+export async function holdSlots(
+  businessId: string,
+  hold: RentalHoldRef,
+  starts: string[],
+  includedSlots: RentalSlotRef[]
+): Promise<number> {
+  const slots: RentalSlotRef[] = [...starts.map((start) => ({ resourceId: hold.resourceId, start })), ...includedSlots];
   const now = Date.now();
   const expiresAt = now + HOLD_MINUTES * 60_000;
   const nowIso = new Date(now).toISOString();
   try {
     await ddb.send(
       new TransactWriteCommand({
-        TransactItems: starts.map((start) => ({
+        TransactItems: slots.map(({ resourceId, start }) => ({
           Put: {
             TableName: RENTALS_TABLE,
             Item: {
               businessId,
-              slotKey: slotKey(hold.resourceId, hold.date, start),
-              resourceId: hold.resourceId,
+              slotKey: slotKey(resourceId, hold.date, start),
+              resourceId,
               date: hold.date,
               start,
               status: 'held',
               holdId: hold.holdId,
               holdExpiresAt: expiresAt,
               ttl: Math.ceil(expiresAt / 1000) + 3600, // DynamoDB TTL is lazy; logic never relies on it
+              bookingResourceId: hold.resourceId,
               bookingStart: hold.start,
               bookingSlots: hold.slots,
               createdAt: nowIso,

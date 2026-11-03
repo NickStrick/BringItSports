@@ -50,9 +50,9 @@ export async function POST(req: NextRequest) {
 
   const hold: RentalHoldRef = { ...request, holdId: crypto.randomUUID() };
   try {
-    const expiresAt = await holdSlots(businessId, hold, resolved.starts);
+    const expiresAt = await holdSlots(businessId, hold, resolved.starts, resolved.includedSlots);
     const response: RentalHoldResponse = {
-      hold: { ...hold, slotKeys: holdSlotKeys(hold, resolved.starts) },
+      hold: { ...hold, slotKeys: holdSlotKeys(hold, resolved.starts, resolved.includedSlots) },
       expiresAt,
       priceCents: bookingPriceCents(resolved.resource, request.slots),
       currency: resolved.resource.currency || 'USD',

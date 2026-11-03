@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Plus, Trash2, X } from 'lucide-react';
-import type { RentalDayHours, RentalResource, SiteConfig, SiteRentalsConfig } from '@/types/site';
+import type { RentalDayHours, RentalResource, RentalTimeBlock, SiteConfig, SiteRentalsConfig } from '@/types/site';
 import { useSite } from '@/context/SiteContext';
 import { getSiteId } from '@/lib/siteId';
 import MediaPicker from './MediaPicker';
 import CurrencyInput from './fields/CurrencyInput';
 import { saveAdminConfig, useAdminAutoSave } from '@/lib/adminAutoSave';
-import { addDays, businessToday, formatDateLabel, FREE_PAYMENT_ID, RENTAL_DEFAULTS } from '@/lib/rentalSlots';
+import { addDays, blockAppliesTo, businessToday, formatBookingLabel, formatDateLabel, formatTime12, FREE_PAYMENT_ID, RENTAL_DEFAULTS, toMinutes } from '@/lib/rentalSlots';
 import type { AdminRentalBooking } from '@/app/api/admin/rentals/route';
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -60,6 +60,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 function ResourceCard({
   resource,
+  otherResources,
   expanded,
   onToggle,
   onChange,
@@ -67,6 +68,7 @@ function ResourceCard({
   onPickImage,
 }: {
   resource: RentalResource;
+  otherResources: RentalResource[];
   expanded: boolean;
   onToggle: () => void;
   onChange: (patch: Partial<RentalResource>) => void;
@@ -260,6 +262,39 @@ function ResourceCard({
             )}
           </div>
 
+          {otherResources.length > 0 && (
+            <div>
+              <div className="text-xs font-medium mb-1">Spaces included in this rental</div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                {otherResources.map((r) => {
+                  const included = resource.includesResourceIds ?? [];
+                  return (
+                    <label key={r.id} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        className="checkbox"
+                        checked={included.includes(r.id)}
+                        onChange={(e) =>
+                          onChange({
+                            includesResourceIds: e.target.checked
+                              ? [...included, r.id]
+                              : included.filter((id) => id !== r.id),
+                          })
+                        }
+                      />
+                      {r.name}
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted mt-1">
+                Set this on the larger space only, e.g. check both cages on a full facility rental. Booking this rental
+                then takes the checked ones at that time, and booking any of them takes this rental, but they don&apos;t
+                affect each other. Leave all unchecked if bookings are independent.
+              </p>
+            </div>
+          )}
+
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -269,6 +304,185 @@ function ResourceCard({
             />
             Hide from customers (stop online booking for this rental)
           </label>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Time blocks tab ──────────────────────────────────────────────────────────
+
+function TimeBlocksPanel({
+  rentals,
+  today,
+  onChange,
+}: {
+  rentals: SiteRentalsConfig;
+  today: string;
+  onChange: (timeBlocks: RentalTimeBlock[]) => void;
+}) {
+  const [date, setDate] = useState('');
+  const [allDay, setAllDay] = useState(false);
+  const [start, setStart] = useState('09:00');
+  const [end, setEnd] = useState('17:00');
+  const [everyRental, setEveryRental] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [conflicts, setConflicts] = useState<AdminRentalBooking[]>([]);
+  const [conflictCheckFailed, setConflictCheckFailed] = useState(false);
+
+  const blocks = rentals.timeBlocks ?? [];
+  const upcoming = blocks.filter((b) => b.date >= today);
+  const blockStart = allDay ? '00:00' : start;
+  const blockEnd = allDay ? '24:00' : end;
+  const canAdd =
+    !!date &&
+    date >= today &&
+    toMinutes(blockEnd) > toMinutes(blockStart) &&
+    (everyRental || selectedIds.length > 0);
+
+  // A block only stops new bookings, so point out any it overlaps that already exist.
+  const checkConflicts = async (block: RentalTimeBlock) => {
+    setConflicts([]);
+    setConflictCheckFailed(false);
+    try {
+      const params = new URLSearchParams({ from: block.date, to: block.date });
+      const res = await fetch(`/api/admin/rentals?${params}`, { headers: { 'x-local-admin': '1' }, cache: 'no-store' });
+      const data = (await res.json().catch(() => null)) as { bookings?: AdminRentalBooking[] } | null;
+      if (!res.ok || !data?.bookings) throw new Error(`HTTP ${res.status}`);
+      setConflicts(
+        data.bookings.filter(
+          (b) =>
+            rentals.resources.some((r) => r.id === b.resourceId && blockAppliesTo(rentals, block, r)) &&
+            toMinutes(b.start) < toMinutes(block.end) &&
+            toMinutes(b.end) > toMinutes(block.start)
+        )
+      );
+    } catch {
+      setConflictCheckFailed(true);
+    }
+  };
+
+  const addBlock = () => {
+    const block: RentalTimeBlock = {
+      id: rid(),
+      date,
+      start: blockStart,
+      end: blockEnd,
+      ...(everyRental ? {} : { resourceIds: selectedIds }),
+    };
+    // Past blocks do nothing, so drop them instead of letting them pile up in the config.
+    onChange(
+      [...upcoming, block].sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start))
+    );
+    setDate('');
+    checkConflicts(block);
+  };
+
+  const blockedRentalNames = (block: RentalTimeBlock) =>
+    block.resourceIds?.length
+      ? rentals.resources.filter((r) => block.resourceIds?.includes(r.id)).map((r) => r.name).join(', ')
+      : 'All rentals';
+
+  return (
+    <div className="space-y-4 max-w-3xl">
+      <p className="text-xs text-muted">
+        Blocked times can&apos;t be booked on any booking calendar on the site. Existing bookings are not cancelled.
+        Click <strong>Save Changes</strong> after adding or removing a block for it to take effect.
+      </p>
+
+      <div className="card admin-card card-solid p-3 space-y-3">
+        <div className="grid md:grid-cols-3 gap-3">
+          <div>
+            <label className="block text-xs font-medium mb-1">Date</label>
+            <input type="date" className="input w-full" min={today} value={date} onChange={(e) => setDate(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">From</label>
+            <input type="time" className="input w-full" disabled={allDay} value={start} onChange={(e) => setStart(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">To</label>
+            <input type="time" className="input w-full" disabled={allDay} value={end} onChange={(e) => setEnd(e.target.value)} />
+          </div>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" className="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} />
+          All day
+        </label>
+
+        <div>
+          <div className="text-xs font-medium mb-1">Applies to</div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" className="checkbox" checked={everyRental} onChange={(e) => setEveryRental(e.target.checked)} />
+              All rentals
+            </label>
+            {!everyRental &&
+              rentals.resources.map((r) => (
+                <label key={r.id} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="checkbox"
+                    checked={selectedIds.includes(r.id)}
+                    onChange={(e) =>
+                      setSelectedIds((ids) => (e.target.checked ? [...ids, r.id] : ids.filter((id) => id !== r.id)))
+                    }
+                  />
+                  {r.name}
+                </label>
+              ))}
+          </div>
+        </div>
+
+        <button type="button" className="btn btn-inverted flex items-center gap-1" disabled={!canAdd} onClick={addBlock}>
+          <Plus size={16} /> Add block
+        </button>
+      </div>
+
+      {conflicts.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <div className="font-medium">These bookings overlap that block and are still active:</div>
+          <ul className="list-disc pl-5 mt-1">
+            {conflicts.map((b) => (
+              <li key={b.holdId}>
+                {b.resourceName}, {b.label}
+                {b.customerName ? ` (${b.customerName})` : ''}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-1">To free the time, contact the customer and release the booking in the Bookings tab.</div>
+        </div>
+      )}
+      {conflictCheckFailed && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          Could not check for existing bookings during that block. Check the Bookings tab.
+        </div>
+      )}
+
+      {upcoming.length === 0 ? (
+        <div className="text-sm text-muted">No upcoming blocks.</div>
+      ) : (
+        <div className="space-y-2">
+          {upcoming.map((b) => (
+            <div key={b.id} className="card admin-card card-solid p-3 flex flex-wrap items-center gap-3 text-sm">
+              <div className="flex-1 min-w-[180px]">
+                <div className="font-medium">
+                  {b.start === '00:00' && b.end === '24:00'
+                    ? `${formatDateLabel(b.date)} · All day`
+                    : formatBookingLabel(b.date, b.start, b.end)}
+                </div>
+                <div className="text-muted">{blockedRentalNames(b)}</div>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost text-red-600"
+                title={`Remove block ${formatDateLabel(b.date)} ${formatTime12(b.start)}`}
+                onClick={() => onChange(blocks.filter((x) => x.id !== b.id))}
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -287,7 +501,7 @@ export default function RentalsModal({ onClose }: RentalsModalProps) {
   const originalRef = useRef<SiteConfig | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<'bookings' | 'rentals' | 'settings'>('bookings');
+  const [tab, setTab] = useState<'bookings' | 'rentals' | 'blocks' | 'settings'>('bookings');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // ── Media picker ──────────────────────────────────────────────────────────
@@ -434,6 +648,7 @@ export default function RentalsModal({ onClose }: RentalsModalProps) {
               {([
                 ['bookings', 'Bookings'],
                 ['rentals', 'Rentals & Hours'],
+                ['blocks', 'Block Time'],
                 ['settings', 'Booking Rules'],
               ] as const).map(([key, label]) => (
                 <button
@@ -549,6 +764,7 @@ export default function RentalsModal({ onClose }: RentalsModalProps) {
                   <ResourceCard
                     key={r.id}
                     resource={r}
+                    otherResources={rentals.resources.filter((x) => x.id !== r.id)}
                     expanded={expandedId === r.id}
                     onToggle={() => setExpandedId((id) => (id === r.id ? null : r.id))}
                     onChange={(patch) => updateResource(r.id, patch)}
@@ -560,6 +776,14 @@ export default function RentalsModal({ onClose }: RentalsModalProps) {
                   />
                 ))}
               </>
+            )}
+
+            {tab === 'blocks' && (
+              <TimeBlocksPanel
+                rentals={rentals}
+                today={today}
+                onChange={(timeBlocks) => updateRentals({ timeBlocks })}
+              />
             )}
 
             {tab === 'settings' && (

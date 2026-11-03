@@ -67,11 +67,11 @@ export async function POST(req: NextRequest) {
   }
 
   const hold: RentalHoldRef = { ...request, holdId: crypto.randomUUID() };
-  const slotKeys = holdSlotKeys(hold, resolved.starts);
+  const slotKeys = holdSlotKeys(hold, resolved.starts, resolved.includedSlots);
   const label = formatBookingLabel(request.date, request.start, resolved.end);
 
   try {
-    await holdSlots(businessId, hold, resolved.starts);
+    await holdSlots(businessId, hold, resolved.starts, resolved.includedSlots);
     await confirmHoldPaid(businessId, hold.holdId, slotKeys, { paymentId: FREE_PAYMENT_ID });
   } catch (err) {
     if (err instanceof SlotTakenError) {

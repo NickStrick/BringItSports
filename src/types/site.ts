@@ -990,11 +990,27 @@ export type RentalResource = {
   /** Index 0 = Sunday … 6 = Saturday */
   weeklyHours: (RentalDayHours | null)[];
   blackoutDates?: string[];     // ISO dates the resource is closed
+  /**
+   * Rentals inside this space, e.g. a full facility's cages. A booking or time block on this
+   * rental takes them too, and one on any of them takes this rental, but they don't affect
+   * each other. Empty/omitted = bookings are independent.
+   */
+  includesResourceIds?: string[];
   hidden?: boolean;             // kept in config but not bookable
+};
+
+/** A span of time the owner has taken off online booking. */
+export type RentalTimeBlock = {
+  id: string;
+  date: string;                 // ISO date, business-local
+  start: string;                // "HH:MM" 24h
+  end: string;                  // "HH:MM" 24h; "24:00" = end of day
+  resourceIds?: string[];       // rentals it applies to; empty/omitted = every rental
 };
 
 export type SiteRentalsConfig = {
   resources: RentalResource[];
+  timeBlocks?: RentalTimeBlock[];
   timezone?: string;            // IANA, e.g. "America/Chicago" — slot times are local to the business
   bookingWindowDays?: number;   // how far ahead customers can book (default 28)
   leadTimeMinutes?: number;     // no bookings starting sooner than this (default 360 = 6 hours)

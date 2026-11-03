@@ -35,8 +35,8 @@ function rentalRefs(checkout: CheckoutRequest | undefined): RentalHoldRef[] {
 /** Resolve rental lines to slot keys from the config (never trusts client-sent keys). */
 export function resolveRentalHolds(config: SiteConfig | null, refs: RentalHoldRef[]) {
   return refs.map((ref) => {
-    const { starts } = resolveBooking(config?.rentals, ref);
-    return { ref, starts, slotKeys: holdSlotKeys(ref, starts) };
+    const { starts, includedSlots } = resolveBooking(config?.rentals, ref);
+    return { ref, starts, includedSlots, slotKeys: holdSlotKeys(ref, starts, includedSlots) };
   });
 }
 
@@ -54,7 +54,7 @@ export async function reholdRentals(
   try {
     const config = await loadLiveSiteConfig();
     const resolved = resolveRentalHolds(config, refs);
-    for (const r of resolved) await holdSlots(businessId, r.ref, r.starts);
+    for (const r of resolved) await holdSlots(businessId, r.ref, r.starts, r.includedSlots);
     return { holds: resolved.map((r) => ({ holdId: r.ref.holdId, slotKeys: r.slotKeys })) };
   } catch (err) {
     if (err instanceof SlotTakenError || err instanceof RentalBookingError) {

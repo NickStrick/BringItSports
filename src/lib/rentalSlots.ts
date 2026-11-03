@@ -3,7 +3,7 @@
 // rental/payment routes (what gets held and charged), so both agree on which
 // slots exist, which are bookable, and what a booking costs.
 // Slot times are wall-clock times in the business's timezone (rentals.timezone).
-import type { RentalResource, SiteRentalsConfig } from '@/types/site';
+import type { RentalResource, RentalTimeBlock, SiteRentalsConfig } from '@/types/site';
 
 export const RENTAL_DEFAULTS = {
   timezone: 'America/Chicago',
@@ -23,6 +23,9 @@ export type RentalBookingRequest = {
 
 /** A held booking, as carried in the cart and checkout request. */
 export type RentalHoldRef = RentalBookingRequest & { holdId: string };
+
+/** One slot of an included rental that a booking also takes (see RentalResource.includesResourceIds). */
+export type RentalSlotRef = { resourceId: string; start: string };
 
 export class RentalBookingError extends Error {}
 
@@ -103,6 +106,7 @@ export function businessToday(rentals: SiteRentalsConfig | undefined, nowMs = Da
 
 // A booking's slots are written in one DynamoDB transaction (100-item limit).
 const MAX_SLOTS_PER_BOOKING = 48;
+const MAX_ROWS_PER_BOOKING = 100;
 
 export function resourceLimits(resource: RentalResource) {
   const minSlots = Math.min(MAX_SLOTS_PER_BOOKING, Math.max(1, resource.minSlots ?? RENTAL_DEFAULTS.minSlots));
@@ -110,17 +114,58 @@ export function resourceLimits(resource: RentalResource) {
   return { minSlots, maxSlots };
 }
 
+export function slotStep(resource: RentalResource): number {
+  return Math.max(5, Math.round(resource.slotMinutes || 30));
+}
+
+/** Rentals sharing space with this one: those it includes and those that include it (Cage 1 ↔ Full Facility, never Cage 1 ↔ Cage 2). */
+export function linkedResources(rentals: SiteRentalsConfig | undefined, resource: RentalResource): RentalResource[] {
+  return (rentals?.resources ?? []).filter(
+    (r) =>
+      r.id !== resource.id &&
+      (resource.includesResourceIds?.includes(r.id) || r.includesResourceIds?.includes(resource.id))
+  );
+}
+
+/** Whether an owner time block applies to this rental, directly or through a linked rental. */
+export function blockAppliesTo(
+  rentals: SiteRentalsConfig | undefined,
+  block: RentalTimeBlock,
+  resource: RentalResource,
+): boolean {
+  if (!block.resourceIds?.length || block.resourceIds.includes(resource.id)) return true;
+  return linkedResources(rentals, resource).some((r) => block.resourceIds?.includes(r.id));
+}
+
 /** Every slot start ("HH:MM") the resource offers on `dateISO`, ignoring bookings and the clock. */
 export function daySlotStarts(resource: RentalResource, dateISO: string): string[] {
   if (resource.blackoutDates?.includes(dateISO)) return [];
   const hours = resource.weeklyHours?.[weekdayOf(dateISO)];
-  const step = Math.max(5, Math.round(resource.slotMinutes || 30));
+  const step = slotStep(resource);
   if (!hours?.open || !hours?.close) return [];
   const open = toMinutes(hours.open);
   const close = toMinutes(hours.close);
   const starts: string[] = [];
   for (let t = open; t + step <= close; t += step) starts.push(fromMinutes(t));
   return starts;
+}
+
+/** Whether an owner time block covers any part of this slot (slot lengths differ between resources). */
+export function isSlotBlocked(
+  rentals: SiteRentalsConfig | undefined,
+  resource: RentalResource,
+  dateISO: string,
+  start: string,
+): boolean {
+  const from = toMinutes(start);
+  const to = from + slotStep(resource);
+  return (rentals?.timeBlocks ?? []).some(
+    (b) =>
+      b.date === dateISO &&
+      blockAppliesTo(rentals, b, resource) &&
+      toMinutes(b.start) < to &&
+      toMinutes(b.end) > from
+  );
 }
 
 /** Whether a slot start is inside the booking window and far enough in the future. */
@@ -151,7 +196,7 @@ export function resolveBooking(
   rentals: SiteRentalsConfig | undefined,
   req: RentalBookingRequest,
   nowMs = Date.now(),
-): { resource: RentalResource; starts: string[]; end: string } {
+): { resource: RentalResource; starts: string[]; includedSlots: RentalSlotRef[]; end: string } {
   const resource = findResource(rentals, req.resourceId);
   if (!resource) throw new RentalBookingError('That rental is no longer available.');
 
@@ -166,12 +211,28 @@ export function resolveBooking(
   const starts = first >= 0 ? dayStarts.slice(first, first + slots) : [];
   // Consecutive within the day's open hours (indexOf + slice also rules out gaps)
   if (starts.length !== slots) throw new RentalBookingError('That time is outside open hours.');
+  if (starts.some((s) => isSlotBlocked(rentals, resource, req.date, s))) {
+    throw new RentalBookingError('That time is not available. Please pick another.');
+  }
   if (!isStartBookable(rentals, req.date, req.start, nowMs)) {
     throw new RentalBookingError('That time can no longer be booked online.');
   }
 
   const end = fromMinutes(toMinutes(starts[starts.length - 1]) + resource.slotMinutes);
-  return { resource, starts, end };
+
+  // Included rentals have their own slot lengths, so take every slot this booking's time touches.
+  const includedSlots = (rentals?.resources ?? [])
+    .filter((r) => r.id !== resource.id && resource.includesResourceIds?.includes(r.id))
+    .flatMap((r) =>
+      daySlotStarts(r, req.date)
+        .filter((s) => toMinutes(s) < toMinutes(end) && toMinutes(s) + slotStep(r) > toMinutes(req.start))
+        .map((start) => ({ resourceId: r.id, start }))
+    );
+  if (starts.length + includedSlots.length > MAX_ROWS_PER_BOOKING) {
+    throw new RentalBookingError('That booking is too long to book online. Please pick a shorter time.');
+  }
+
+  return { resource, starts, includedSlots, end };
 }
 
 export function bookingPriceCents(resource: RentalResource, slots: number): number {

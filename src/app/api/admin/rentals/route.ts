@@ -46,6 +46,32 @@ export async function GET(req: NextRequest) {
       const rows = await listResourceSlots(businessId, resource.id, from, to);
       for (const row of rows) {
         if (!isRowTaken(row, now)) continue; // expired holds
+        // A row on an included rental belongs to the booking made on the larger rental: show it
+        // once under that rental, at the booked time, with all its rows so a release frees them.
+        const booked = rentals?.resources.find((r) => r.id === row.bookingResourceId);
+        if (booked && booked.id !== resource.id && row.bookingStart) {
+          const existing = bookings.get(row.holdId);
+          if (existing) {
+            existing.slotKeys.push(row.slotKey);
+          } else {
+            bookings.set(row.holdId, {
+              holdId: row.holdId,
+              resourceId: booked.id,
+              resourceName: booked.name,
+              date: row.date,
+              start: row.bookingStart,
+              end: fromMinutes(toMinutes(row.bookingStart) + booked.slotMinutes * (row.bookingSlots ?? 1)),
+              label: '',
+              status: row.status,
+              slotKeys: [row.slotKey],
+              orderId: row.orderId || undefined,
+              paymentId: row.paymentId || undefined,
+              customerName: row.customerName || undefined,
+              customerEmail: row.customerEmail || undefined,
+            });
+          }
+          continue;
+        }
         const end = fromMinutes(toMinutes(row.start) + resource.slotMinutes);
         const existing = bookings.get(row.holdId);
         if (!existing) {

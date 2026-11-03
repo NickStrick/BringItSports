@@ -1,14 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { loadLiveSiteConfig } from '@/lib/checkoutConfig';
 import { isRowTaken, listResourceSlots } from '@/lib/rentalsDb';
-import { addDays, businessToday, daySlotStarts, findResource, isStartBookable } from '@/lib/rentalSlots';
+import {
+  addDays,
+  businessToday,
+  daySlotStarts,
+  findResource,
+  isSlotBlocked,
+  isStartBookable,
+  linkedResources,
+  slotStep,
+  toMinutes,
+} from '@/lib/rentalSlots';
 
 const MAX_DAYS = 14;
 
 export type RentalAvailabilityDay = { date: string; slots: { start: string; available: boolean }[] };
 
 // Public endpoint: a resource's slots for a run of days, each marked bookable or not
-// (closed hours, past/too-soon times, and taken slots all come back unavailable).
+// (closed hours, past/too-soon times, owner time blocks, and taken slots all come back unavailable).
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const resourceId = (searchParams.get('resourceId') || '').trim();
@@ -32,6 +42,21 @@ export async function GET(req: NextRequest) {
     const now = Date.now();
     const taken = new Set(rows.filter((r) => isRowTaken(r, now)).map((r) => `${r.date}#${r.start}`));
 
+    // Linked rentals can have different slot lengths, so compare by time rather than slot.
+    const linkedTaken = (
+      await Promise.all(
+        linkedResources(rentals, resource).map(async (linked) =>
+          (await listResourceSlots(businessId, linked.id, from, to))
+            .filter((r) => isRowTaken(r, now))
+            .map((r) => ({ date: r.date, from: toMinutes(r.start), to: toMinutes(r.start) + slotStep(linked) }))
+        )
+      )
+    ).flat();
+    const isLinkedTaken = (date: string, start: string) =>
+      linkedTaken.some(
+        (r) => r.date === date && r.from < toMinutes(start) + slotStep(resource) && r.to > toMinutes(start)
+      );
+
     const result: RentalAvailabilityDay[] = [];
     for (let i = 0; i < days; i++) {
       const date = addDays(from, i);
@@ -39,7 +64,11 @@ export async function GET(req: NextRequest) {
         date,
         slots: daySlotStarts(resource, date).map((start) => ({
           start,
-          available: !taken.has(`${date}#${start}`) && isStartBookable(rentals, date, start, now),
+          available:
+            !taken.has(`${date}#${start}`) &&
+            !isLinkedTaken(date, start) &&
+            !isSlotBlocked(rentals, resource, date, start) &&
+            isStartBookable(rentals, date, start, now),
         })),
       });
     }
