@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { useSite } from '@/context/SiteContext';
 import AnimatedSection from '@/components/AnimatedSection';
+import Dropdown from '@/components/Dropdown';
 import type { SendAMessageSection, SendAMessageField } from '@/types/site';
 import { resolveAssetUrl } from '@/lib/assetUrl';
 
@@ -232,6 +233,7 @@ export default function SendAMessage(props: SendAMessageSection) {
               {visibleFields.map((field) => (
                 <div key={field.id}>
                   <label
+                    id={`${field.id}-label`}
                     htmlFor={field.id}
                     className="block text-sm font-semibold mb-1.5 text-[var(--text-1)]"
                   >
@@ -249,17 +251,17 @@ export default function SendAMessage(props: SendAMessageSection) {
                       onChange={(e) => setValue(field.id, e.target.value)}
                     />
                   ) : field.type === 'select' && field.options?.length ? (
-                    <select
+                    <Dropdown
                       id={field.id}
-                      className={[inputBase, errors[field.id] ? inputError : ''].join(' ')}
+                      labelId={`${field.id}-label`}
+                      name={field.id}
+                      placeholder="Select…"
+                      required={field.required}
+                      invalid={!!errors[field.id]}
                       value={values[field.id] ?? ''}
-                      onChange={(e) => setValue(field.id, e.target.value)}
-                    >
-                      <option value="">Select…</option>
-                      {field.options.map((opt) => (
-                        <option key={opt} value={opt}>{opt}</option>
-                      ))}
-                    </select>
+                      onChange={(v) => setValue(field.id, v)}
+                      options={field.options.map((opt) => ({ value: opt, label: opt }))}
+                    />
                   ) : (
                     <input
                       id={field.id}

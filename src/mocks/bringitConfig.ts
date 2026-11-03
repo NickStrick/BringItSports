@@ -49,7 +49,7 @@ export const mockSiteConfig: SiteConfig = {
     // Lime green + bluish purple from the Bring It logo
     colors: {
       primary: "#2e3192",
-      accent: "#8cc63f",
+      accent: "#679627",
       bg: "#f7faf0",
       bg2: "#d6d7ff",
       fg: "#1c1d4a",
