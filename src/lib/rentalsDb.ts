@@ -152,9 +152,9 @@ export async function confirmHoldPaid(
             TableName: RENTALS_TABLE,
             Key: { businessId, slotKey: key },
             UpdateExpression:
-              'SET #st = :booked, orderId = :oid, paymentId = :pid, updatedAt = :now REMOVE holdExpiresAt, ttl',
+              'SET #st = :booked, orderId = :oid, paymentId = :pid, updatedAt = :now REMOVE holdExpiresAt, #ttl',
             ConditionExpression: 'holdId = :hid',
-            ExpressionAttributeNames: { '#st': 'status' },
+            ExpressionAttributeNames: { '#st': 'status', '#ttl': 'ttl' }, // both are DynamoDB reserved words
             ExpressionAttributeValues: {
               ':booked': 'booked',
               ':oid': info.orderId ?? '',
@@ -192,8 +192,9 @@ export async function attachOrderToHold(
             TableName: RENTALS_TABLE,
             Key: { businessId, slotKey: key },
             UpdateExpression:
-              'SET orderId = :oid, customerName = :name, customerEmail = :email, updatedAt = :now REMOVE holdExpiresAt, ttl',
+              'SET orderId = :oid, customerName = :name, customerEmail = :email, updatedAt = :now REMOVE holdExpiresAt, #ttl',
             ConditionExpression: 'holdId = :hid',
+            ExpressionAttributeNames: { '#ttl': 'ttl' },
             ExpressionAttributeValues: {
               ':oid': info.orderId,
               ':name': info.customerName ?? '',
